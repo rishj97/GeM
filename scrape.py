@@ -103,13 +103,16 @@ def parse_formula(formula):
 
 
 def parse_boq_titles(boq_titles, keyword_formulas):
+    keyword_boq_buckets = {}
+    for k in all_keyword_formulas:
+        keyword_boq_buckets[k] = []
     parsed_boq_titles = []
     for (title, boq_id) in boq_titles:
         match, formula = check_keyword_formulas(title, keyword_formulas)
         if match:
             keyword_boq_buckets[formula].append(title)
             parsed_boq_titles.append((title, boq_id))
-    return parsed_boq_titles
+    return parsed_boq_titles, keyword_boq_buckets
 
 
 def check_keyword_formulas(boq_title, keyword_formulas):
@@ -149,7 +152,7 @@ def frequency_wordwise(paragraph):
         print('Frequency of', freqs[word], 'is :', paragraph.count(freqs[word]))
 
 
-def print_keyword_formula_analysis(formula):
+def print_keyword_formula_analysis(formula, keyword_boq_buckets):
     for kk, vv in keyword_boq_buckets.items():
         print(kk, len(vv), vv)
     print(f'----------------------------{formula} ANALYSIS------------------------------')
@@ -162,7 +165,7 @@ def print_keyword_formula_analysis(formula):
 
 def write_parsed_boqs(boqs):
     today = date.today()
-    search_start_date = (today + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
+    search_start_date = (today + datetime.timedelta(days=0)).strftime("%d-%m-%Y")
     search_end_date = (today + datetime.timedelta(days=16)).strftime("%d-%m-%Y")
     filename = f'GEM BOQS {today.strftime("%d-%m-%Y")}.csv'
     with open(filename, 'w+') as csvfile:
@@ -181,13 +184,13 @@ if __name__ == "__main__":
                             'KIT--KITCHEN,TOOL,READY,STEP,TRAINEE,PATHOLOGY,PCR,RNA', 'RAIN--TRAINING',
                             'PONCHO', 'JACKET', 'VISIBILITY', 'VIZIBILITY', 'SAFETY--INSTALLATION', 'REFLECTIVE',
                             'LUMINOUS',
-                            'GARMENTS', 'TROUSER', 'GLOVES', 'BALACLAVA'
+                            'GARMENTS', 'TROUSER', 'GLOVES', 'BALACLAVA',
+                            'UNIFORM'
                             ]
-    keyword_boq_buckets = {}
-    for k in all_keyword_formulas:
-        keyword_boq_buckets[k] = []
+
     all_boq_titles = get_boq_titles()
     print(f'{len(all_boq_titles)} BOQ Titles found.')
-    write_parsed_boqs(parse_boq_titles(all_boq_titles, all_keyword_formulas))
+    boq_titles, boq_buckets = parse_boq_titles(all_boq_titles, all_keyword_formulas)
+    write_parsed_boqs(boq_titles)
 
 # TODO: add CPPP tenders parsing at https://gem.gov.in/cppp/1?
