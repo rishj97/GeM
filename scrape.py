@@ -164,12 +164,15 @@ def write_parsed_boqs(boqs):
     today = date.today()
     search_start_date = (today + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
     search_end_date = (today + datetime.timedelta(days=16)).strftime("%d-%m-%Y")
-    with open(f'GEM BOQS {today.strftime("%d-%m-%Y")}.csv', 'w+') as csvfile:
+    filename = f'GEM BOQS {today.strftime("%d-%m-%Y")}.csv'
+    with open(filename, 'w+') as csvfile:
         csvwriter = csv.writer(csvfile)
-        csvwriter.writerow(['BOQ TITLE', 'BOQ TITLE ID', 'BOQ TITLE URL'])
+        csvwriter.writerow(['BOQ TITLE', 'BOQ TITLE URL'])
         for boq, boq_id in boqs:
             url = f"https://bidplus.gem.gov.in/advance-search?boqtitle={boq_id}&from_date={search_start_date}&to_date={search_end_date}&searchboq=Search"
-            csvwriter.writerow([boq, boq_id, url])
+            csvwriter.writerow([boq, url])
+
+    print(f'Saved BOQ titles to {filename}')
 
 
 if __name__ == "__main__":
@@ -185,6 +188,6 @@ if __name__ == "__main__":
         keyword_boq_buckets[k] = []
     all_boq_titles = get_boq_titles()
     print(f'{len(all_boq_titles)} BOQ Titles found.')
-    write_parsed_boqs(parse_boq_titles(all_boq_titles), all_keyword_formulas)
+    write_parsed_boqs(parse_boq_titles(all_boq_titles, all_keyword_formulas))
 
 # TODO: add CPPP tenders parsing at https://gem.gov.in/cppp/1?
