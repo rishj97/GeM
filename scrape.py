@@ -102,17 +102,17 @@ def parse_formula(formula):
     return pos, negs
 
 
-def parse_boq_titles(boq_titles):
+def parse_boq_titles(boq_titles, keyword_formulas):
     parsed_boq_titles = []
     for (title, boq_id) in boq_titles:
-        match, formula = check_keyword_formulas(title)
+        match, formula = check_keyword_formulas(title, keyword_formulas)
         if match:
             keyword_boq_buckets[formula].append(title)
             parsed_boq_titles.append((title, boq_id))
     return parsed_boq_titles
 
 
-def check_keyword_formulas(boq_title):
+def check_keyword_formulas(boq_title, keyword_formulas):
     for keyword_formula in keyword_formulas:
         pos, negs = parse_formula(keyword_formula)
         pos_hai, neg_hai = 1, 0
@@ -173,17 +173,18 @@ def write_parsed_boqs(boqs):
 
 
 if __name__ == "__main__":
-    keyword_formulas = ['FLAME', 'FIRE,FIGHTING', 'FIRE,SUIT', 'PANT', 'CLOTH', 'FABRIC--FABRICATED,FABRICATION',
-                        'OVER,ALL', 'COVER,ALL', 'BOILER', 'SUIT', 'DUNGAREE', 'SLEEPING', 'SLEEPING,BAG',
-                        'KIT--KITCHEN,TOOL,READY,STEP,TRAINEE,PATHOLOGY,PCR,RNA', 'RAIN--TRAINING',
-                        'PONCHO', 'JACKET', 'VISIBILITY', 'VIZIBILITY', 'SAFETY--INSTALLATION', 'REFLECTIVE', 'LUMINOUS',
-                        'GARMENTS', 'TROUSER', 'GLOVES', 'BALACLAVA'
-                        ]
+    all_keyword_formulas = ['FLAME', 'FIRE,FIGHTING', 'FIRE,SUIT', 'PANT', 'CLOTH', 'FABRIC--FABRICATED,FABRICATION',
+                            'OVER,ALL', 'COVER,ALL', 'BOILER', 'SUIT', 'DUNGAREE', 'SLEEPING', 'SLEEPING,BAG',
+                            'KIT--KITCHEN,TOOL,READY,STEP,TRAINEE,PATHOLOGY,PCR,RNA', 'RAIN--TRAINING',
+                            'PONCHO', 'JACKET', 'VISIBILITY', 'VIZIBILITY', 'SAFETY--INSTALLATION', 'REFLECTIVE',
+                            'LUMINOUS',
+                            'GARMENTS', 'TROUSER', 'GLOVES', 'BALACLAVA'
+                            ]
     keyword_boq_buckets = {}
-    for k in keyword_formulas:
+    for k in all_keyword_formulas:
         keyword_boq_buckets[k] = []
     all_boq_titles = get_boq_titles()
     print(f'{len(all_boq_titles)} BOQ Titles found.')
-    write_parsed_boqs(parse_boq_titles(all_boq_titles))
+    write_parsed_boqs(parse_boq_titles(all_boq_titles), all_keyword_formulas)
 
 # TODO: add CPPP tenders parsing at https://gem.gov.in/cppp/1?
