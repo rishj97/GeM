@@ -54,6 +54,22 @@ def get_total_pages():
     return int(lis[-1].a['data-ci-pagination-page'])
 
 
+def get_boq_titles():
+    url = 'https://bidplus.gem.gov.in/advance-search'
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content, 'lxml')
+    table = soup.find('select', attrs={'id': 'boqtitle_con'})
+    options = table.findAll('option')
+    boq_titles = []
+    for option in options:
+        boq_title_number = option.attrs['value']
+        if boq_title_number == '':
+            print(f'No BOQ Title Number Found For: {option.text}')
+            continue
+        boq_titles.append((option.text, int(boq_title_number)))
+    return boq_titles
+
+
 def extract_upcoming_bids_data(start_page, end_page):
     today = date.today()
     search_start_date = (today + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
@@ -77,10 +93,97 @@ def extract_upcoming_bids_data(start_page, end_page):
             print(f'All Bids length: {len(all_bids)}')
 
 
-if __name__ == "__main__":
-    # total_pages = get_total_pages()
-    extract_upcoming_bids_data(1, 300)
+def parse_formula(formula):
+    negs = []
+    splitted = formula.split('--')
+    pos = splitted[0].split(',')
+    if len(splitted) == 2:
+        negs = splitted[1].split(',')
+    return pos, negs
 
+
+def parse_boq_titles(boq_titles):
+    parsed_boq_titles = []
+    for (title, boq_id) in boq_titles:
+        match, formula = check_keyword_formulas(title)
+        if match:
+            keyword_boq_buckets[formula].append(title)
+            parsed_boq_titles.append((title, boq_id))
+    return parsed_boq_titles
+
+
+def check_keyword_formulas(boq_title):
+    for keyword_formula in keyword_formulas:
+        pos, negs = parse_formula(keyword_formula)
+        pos_hai, neg_hai = 1, 0
+
+        # pos sare hone chahiye
+        for pos_w in pos:
+            if pos_w not in boq_title:
+                pos_hai = 0
+                break
+
+        if not pos_hai:
+            continue
+
+        # neg ek bhi nai hona chahiye
+        for neg_w in negs:
+            if neg_w in boq_title:
+                neg_hai = 1
+                break
+
+        if pos_hai and (not neg_hai):
+            return True, keyword_formula
+    return False, ''
+
+
+def frequency_wordwise(paragraph):
+    paragraph = paragraph.split()
+    freqs = []
+
+    for word in paragraph:
+        if word not in freqs:
+            freqs.append(word)
+
+    for word in range(0, len(freqs)):
+        print('Frequency of', freqs[word], 'is :', paragraph.count(freqs[word]))
+
+
+def print_keyword_formula_analysis(formula):
+    for kk, vv in keyword_boq_buckets.items():
+        print(kk, len(vv), vv)
+    print(f'----------------------------{formula} ANALYSIS------------------------------')
+    for title in keyword_boq_buckets[formula]:
+        print(title)
+    print(f'----------------------------------------------------------------------------')
+    print(len(keyword_boq_buckets[formula]))
+    print(frequency_wordwise(' '.join(keyword_boq_buckets[formula])))
+
+
+def write_parsed_boqs(boqs):
+    today = date.today()
+    search_start_date = (today + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
+    search_end_date = (today + datetime.timedelta(days=16)).strftime("%d-%m-%Y")
+    with open(f'GEM BOQS {today.strftime("%d-%m-%Y")}.csv', 'w+') as csvfile:
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerow(['BOQ TITLE', 'BOQ TITLE ID', 'BOQ TITLE URL'])
+        for boq, boq_id in boqs:
+            url = f"https://bidplus.gem.gov.in/advance-search?boqtitle={boq_id}&from_date={search_start_date}&to_date={search_end_date}&searchboq=Search"
+            csvwriter.writerow([boq, boq_id, url])
+
+
+if __name__ == "__main__":
+    keyword_formulas = ['FLAME', 'FIRE,FIGHTING', 'FIRE,SUIT', 'PANT', 'CLOTH', 'FABRIC--FABRICATED,FABRICATION',
+                        'OVER,ALL', 'COVER,ALL', 'BOILER', 'SUIT', 'DUNGAREE', 'SLEEPING', 'SLEEPING,BAG',
+                        'KIT--KITCHEN,TOOL,READY,STEP,TRAINEE,PATHOLOGY,PCR,RNA', 'RAIN--TRAINING',
+                        'PONCHO', 'JACKET', 'VISIBILITY', 'VIZIBILITY', 'SAFETY--INSTALLATION', 'REFLECTIVE', 'LUMINOUS',
+                        'GARMENTS', 'TROUSER', 'GLOVES', 'BALACLAVA'
+                        ]
+    keyword_boq_buckets = {}
+    for k in keyword_formulas:
+        keyword_boq_buckets[k] = []
+    all_boq_titles = get_boq_titles()
+    print(f'{len(all_boq_titles)} BOQ Titles found.')
+    write_parsed_boqs(parse_boq_titles(all_boq_titles))
 
 # TODO: add CPPP tenders parsing at https://gem.gov.in/cppp/1?
-
