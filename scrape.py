@@ -45,8 +45,7 @@ def get_all_bids_from_page(url):
     return bids
 
 
-def get_total_pages():
-    url = 'https://bidplus.gem.gov.in/bidlists?bidlists'
+def get_total_pages(url):
     r = requests.get(url)
     soup = BeautifulSoup(r.content, 'lxml')
     table = soup.find('ul', attrs={'class': 'pagination'})
@@ -70,27 +69,26 @@ def get_boq_titles():
     return boq_titles
 
 
-def extract_upcoming_bids_data(start_page, end_page):
-    today = date.today()
-    search_start_date = (today + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
-    search_end_date = (today + datetime.timedelta(days=16)).strftime("%d-%m-%Y")
-
+def extract_upcoming_bids_data(base_url, start_page, end_page, filename):
     all_bids = {}
-
-    with open(f'GEM ALL BIDS {search_start_date} TO {search_end_date}.csv', 'w+') as csvfile:
-        csvwriter = csv.writer(csvfile)
-        csvwriter.writerow(['GEM ID', 'ITEM', 'QUANTITY', 'DEPARTMENT', 'START DATE', 'END DATE', 'BID DOC URL'])
-        for page_num in range(start_page, end_page + 1):
-            print(f'Processing page {page_num}')
-            url = f"https://bidplus.gem.gov.in/advance-search?bno=&category=&from_date={search_start_date}&to_date={search_end_date}&searchbid=Search&page_no={page_num}"
-            bids = get_all_bids_from_page(url)
-            print(f'Bids length: {len(bids)}')
-            for gem_no in bids:
-                bid_info = bids[gem_no]
-                csvwriter.writerow(
-                    [gem_no, bid_info[0], bid_info[1], bid_info[2], bid_info[3], bid_info[4], bid_info[5]])
-            all_bids.update(bids)
-            print(f'All Bids length: {len(all_bids)}')
+    for page_num in range(start_page, end_page + 1):
+        page_num = 1
+        print(f'Processing page {page_num}')
+        url = f"{base_url}&page_no={page_num}"
+        bids = get_all_bids_from_page(url)
+        print(f'Bids length: {len(bids)}')
+        print(', '.join(bids.keys()))
+        all_bids.update(bids)
+        print(f"All Bids length: {len(all_bids)}")
+    return all_bids
+    # except:
+    #     with open(filename, 'w+') as csvfile:
+    #         csvwriter = csv.writer(csvfile)
+    #         csvwriter.writerow(['GEM ID', 'ITEM', 'QUANTITY', 'DEPARTMENT', 'START DATE', 'END DATE', 'BID DOC URL'])
+    #         for gem_no in all_bids:
+    #             bid_info = all_bids[gem_no]
+    #             csvwriter.writerow(
+    #                 [gem_no, bid_info[0], bid_info[1], bid_info[2], bid_info[3], bid_info[4], bid_info[5]])
 
 
 def parse_formula(formula):
@@ -104,7 +102,7 @@ def parse_formula(formula):
 
 def parse_boq_titles(boq_titles, keyword_formulas):
     keyword_boq_buckets = {}
-    for k in all_keyword_formulas:
+    for k in ALL_KEYWORD_FORMULAS:
         keyword_boq_buckets[k] = []
     parsed_boq_titles = []
     for (title, boq_id) in boq_titles:
@@ -178,8 +176,30 @@ def write_parsed_boqs(boqs):
     print(f'Saved BOQ titles to {filename}')
 
 
+def run_boq_search():
+    all_boq_titles = get_boq_titles()
+    print(f'{len(all_boq_titles)} BOQ Titles found.')
+    boq_titles, boq_buckets = parse_boq_titles(all_boq_titles, ALL_KEYWORD_FORMULAS)
+    write_parsed_boqs(boq_titles)
+
+
+def get_next_week_dates():
+    today = date.today()
+    start = (today + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
+    end = (today + datetime.timedelta(days=8)).strftime("%d-%m-%Y")
+    return start, end
+
+
+def run_weekwise_all_bids_search():
+    start, end = get_next_week_dates()
+    url = f'https://bidplus.gem.gov.in/advance-search?from_date={start}&to_date={end}&searchbid=Search'
+    total_pages = get_total_pages(url)
+    print(f'Total pages: {total_pages}')
+    all_bids = extract_upcoming_bids_data(url, 1, total_pages, 'TEST FILE ALL BIDS.csv')
+
+
 if __name__ == "__main__":
-    all_keyword_formulas = ['FLAME', 'FIRE,FIGHTING', 'FIRE,SUIT', 'PANT', 'CLOTH', 'FABRIC--FABRICATED,FABRICATION',
+    ALL_KEYWORD_FORMULAS = ['FLAME', 'FIRE,FIGHTING', 'FIRE,SUIT', 'PANT', 'CLOTH', 'FABRIC--FABRICATED,FABRICATION',
                             'OVER,ALL', 'COVER,ALL', 'BOILER', 'SUIT', 'DUNGAREE', 'SLEEPING', 'SLEEPING,BAG',
                             'KIT--KITCHEN,TOOL,READY,STEP,TRAINEE,PATHOLOGY,PCR,RNA', 'RAIN--TRAINING',
                             'PONCHO', 'JACKET', 'VISIBILITY', 'VIZIBILITY', 'SAFETY--INSTALLATION', 'REFLECTIVE',
@@ -187,10 +207,7 @@ if __name__ == "__main__":
                             'GARMENTS', 'TROUSER', 'GLOVES', 'BALACLAVA',
                             'UNIFORM'
                             ]
-
-    all_boq_titles = get_boq_titles()
-    print(f'{len(all_boq_titles)} BOQ Titles found.')
-    boq_titles, boq_buckets = parse_boq_titles(all_boq_titles, all_keyword_formulas)
-    write_parsed_boqs(boq_titles)
+    # run_boq_search()
+    run_weekwise_all_bids_search()
 
 # TODO: add CPPP tenders parsing at https://gem.gov.in/cppp/1?
