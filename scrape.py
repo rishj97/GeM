@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from datetime import datetime
 import multiprocessing as mp
 from os.path import exists
+import traceback
 
 
 def get_all_bids_from_page(url):
@@ -92,18 +93,9 @@ def extract_upcoming_bids_data(base_url, start_page, end_page, filename):
         url = f"{base_url}&page_no={page_num}"
         bids = get_all_bids_from_page(url)
         print(f'Page {start_page} Bids length: {len(bids)}')
-        print(', '.join(bids.keys()))
         all_bids.update(bids)
         print(f"BATCH Start {start_page}; End {end_page}; All Bids length: {len(all_bids)}")
     return all_bids
-    # except:
-    #     with open(filename, 'w+') as csvfile:
-    #         csvwriter = csv.writer(csvfile)
-    #         csvwriter.writerow(['GEM ID', 'ITEM', 'QUANTITY', 'DEPARTMENT', 'START DATE', 'END DATE', 'BID DOC URL'])
-    #         for gem_no in all_bids:
-    #             bid_info = all_bids[gem_no]
-    #             csvwriter.writerow(
-    #                 [gem_no, bid_info[0], bid_info[1], bid_info[2], bid_info[3], bid_info[4], bid_info[5]])
 
 
 def parse_formula(formula):
@@ -293,12 +285,22 @@ def run_weekwise_all_bids_search():
         b_batch_num = int(b_batch_page_offset / pages_per_batch / num_batches)
         print(
             f'-----------------------TIME STATS START BATCH NUM {b_batch_num} {datetime.now().strftime("%d.%b %Y %H:%M:%S")}')
-        results = pool.starmap_async(extract_upcoming_bids_data,
-                                     [(url, i, min(i + pages_per_batch - 1, total_pages), 'random file name')
-                                      for i in range(1 + b_batch_page_offset,
-                                                     min(pages_per_batch * num_batches + b_batch_page_offset,
-                                                         total_pages + 1),
-                                                     pages_per_batch)]).get()
+        results = []
+        while True:
+            try:
+                results = pool.starmap_async(extract_upcoming_bids_data,
+                                             [(url, i, min(i + pages_per_batch - 1, total_pages), 'random file name')
+                                              for i in range(1 + b_batch_page_offset,
+                                                             min(pages_per_batch * num_batches + b_batch_page_offset,
+                                                                 total_pages + 1),
+                                                             pages_per_batch)]).get()
+            except:
+                tb = traceback.format_exc()
+                print(f'!!!!!!!! Exception Thrown !!!!!!!!!')
+                print(tb)
+                print(f'!!!!!!!! Retrying !!!!!!!!!')
+                continue
+            break
         print(
             f'-----------------------TIME STATS END BATCH NUM {b_batch_num} {datetime.now().strftime("%d.%b %Y %H:%M:%S")}')
         write_results_to_files(results)
@@ -318,3 +320,4 @@ if __name__ == "__main__":
     run_weekwise_all_bids_search()
 
 # TODO: add CPPP tenders parsing at https://gem.gov.in/cppp/1?
+# TODO: read the full item name, right now - its not reading the item names from the correct place!
