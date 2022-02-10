@@ -54,6 +54,22 @@ def get_total_pages():
     return int(lis[-1].a['data-ci-pagination-page'])
 
 
+def get_item_categories():
+    url = 'https://bidplus.gem.gov.in/advance-search'
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content, 'lxml')
+    table = soup.find('select', attrs={'class': ['form-control', 'select2']})
+    options = table.findAll('option')
+    categories = []
+    for option in options:
+        category_number = option.attrs['value']
+        if category_number == '':
+            print(f'No Category Number Found For: {option.text}')
+            continue
+        categories.append((option.text.upper(), category_number))
+    return categories
+
+
 def get_boq_titles():
     url = 'https://bidplus.gem.gov.in/advance-search'
     r = requests.get(url)
@@ -178,6 +194,21 @@ def write_parsed_boqs(boqs):
     print(f'Saved BOQ titles to {filename}')
 
 
+def write_parsed_categories(categories):
+    today = date.today()
+    search_start_date = (today + datetime.timedelta(days=0)).strftime("%d-%m-%Y")
+    search_end_date = (today + datetime.timedelta(days=200)).strftime("%d-%m-%Y")
+    filename = f'GEM CATEGORIES {today.strftime("%d-%m-%Y")}.csv'
+    with open(filename, 'w+') as csvfile:
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerow(['BOQ TITLE', 'BOQ TITLE URL'])
+        for cat, cat_num in categories:
+            url = f"https://bidplus.gem.gov.in/advance-search?category={cat_num}&from_date={search_start_date}&to_date={search_end_date}&searchbid=Search"
+            csvwriter.writerow([cat, url])
+
+    print(f'Saved categories titles to {filename}')
+
+
 if __name__ == "__main__":
     all_keyword_formulas = ['FLAME', 'FIRE,FIGHTING', 'FIRE,SUIT', 'PANT', 'CLOTH', 'FABRIC--FABRICATED,FABRICATION',
                             'OVER,ALL', 'COVER,ALL', 'BOILER', 'SUIT', 'DUNGAREE', 'SLEEPING', 'SLEEPING,BAG',
@@ -188,9 +219,13 @@ if __name__ == "__main__":
                             'UNIFORM'
                             ]
 
-    all_boq_titles = get_boq_titles()
-    print(f'{len(all_boq_titles)} BOQ Titles found.')
-    boq_titles, boq_buckets = parse_boq_titles(all_boq_titles, all_keyword_formulas)
-    write_parsed_boqs(boq_titles)
+    # all_boq_titles = get_boq_titles()
+    # print(f'{len(all_boq_titles)} BOQ Titles found.')
+    # boq_titles, boq_buckets = parse_boq_titles(all_boq_titles, all_keyword_formulas)
+    # write_parsed_boqs(boq_titles)
+    all_categories = get_item_categories()
+    parsed_categories, category_buckets = parse_boq_titles(all_categories, all_keyword_formulas)
+    write_parsed_categories(parsed_categories)
 
 # TODO: add CPPP tenders parsing at https://gem.gov.in/cppp/1?
+# TODO: !! Lots of bids are without BOQ title. Those arent covered here. Write a program to cover those as well.
