@@ -20,7 +20,7 @@ def get_all_bids_from_page(url):
     for row in table.findAll('div', attrs={'class': 'border block'}):
         gem_no_header = row.find('div', attrs={'class': 'block_header'})
         gem_no_p = gem_no_header.find('p', attrs={'class': 'bid_no pull-left'})
-        if 'href' not in gem_no_p.a:
+        if 'href' not in gem_no_p.a.attrs:
             bid_doc_url = 'n/a'
         else:
             bid_doc_url = 'https://bidplus.gem.gov.in' + gem_no_p.a['href']
@@ -81,12 +81,12 @@ def get_boq_titles():
     return boq_titles
 
 
-def extract_upcoming_bids_data1(base_url, start_page, end_page, filename):
+def extract_upcoming_bids_data1(base_url, start_page, end_page):
     print(f'DONE PAGES {start_page} to {end_page}')
     return []
 
 
-def extract_upcoming_bids_data(base_url, start_page, end_page, filename):
+def extract_upcoming_bids_data(base_url, start_page, end_page):
     all_bids = {}
     for page_num in range(start_page, end_page + 1):
         print(f'Processing page {page_num}')
@@ -200,6 +200,7 @@ def run_boq_search():
     all_boq_titles = get_boq_titles()
     print(f'{len(all_boq_titles)} BOQ Titles found.')
     boq_titles, boq_buckets = parse_boq_titles(all_boq_titles, ALL_KEYWORD_FORMULAS)
+    # get_tenders_for_boqs(boq_titles)
     write_parsed_boqs(boq_titles)
 
 
@@ -225,12 +226,13 @@ def get_week_nums(bids):
     return week_nums
 
 
-def write_bid_to_file(bid_num, bid_info, writer):
-    writer.writerow([bid_num, bid_info[0], bid_info[1], bid_info[2], bid_info[3], bid_info[4], bid_info[5]])
+def write_bid_to_file(bid_num, bid_info, writer, today):
+    writer.writerow([bid_num, bid_info[0], bid_info[1], bid_info[2], bid_info[3], bid_info[4], bid_info[5], today])
 
 
 def write_results_to_files(results):
     bids = merge_results(results)
+    today = date.today().strftime("%d-%m-%Y")
     parsed_bids, keyword_bid_buckets = parse_bids(bids, ALL_KEYWORD_FORMULAS)
     if len(parsed_bids) == 0:
         return
@@ -242,7 +244,7 @@ def write_results_to_files(results):
         existing_file_bids = all_csv_writers[bid_info[6]][1]
         if bid_num in existing_file_bids:
             continue
-        write_bid_to_file(bid_num, bid_info, all_csv_writers[bid_info[6]][0])
+        write_bid_to_file(bid_num, bid_info, all_csv_writers[bid_info[6]][0], today)
 
 
 def get_bids_from_file(opened_file):
@@ -268,6 +270,41 @@ def get_all_file_writers(parsed_bids):
     return files
 
 
+def search_all_bids_parallel(pool, url, pages_per_batch, total_pages, b_batch_page_offset, num_batches):
+    while True:
+        try:
+            results = pool.starmap_async(extract_upcoming_bids_data,
+                                         [(url, i, min(i + pages_per_batch - 1, total_pages))
+                                          for i in range(1 + b_batch_page_offset,
+                                                         min(pages_per_batch * num_batches + b_batch_page_offset,
+                                                             total_pages + 1),
+                                                         pages_per_batch)]).get()
+        except:
+            tb = traceback.format_exc()
+            print(f'!!!!!!!! Exception Thrown !!!!!!!!!')
+            print(tb)
+            print(f'!!!!!!!! Retrying !!!!!!!!!')
+            continue
+        return results
+
+
+def search_all_bids_seq(url, pages_per_batch, total_pages, b_batch_page_offset, num_batches):
+    while True:
+        try:
+            results = [extract_upcoming_bids_data(url, i, min(i + pages_per_batch - 1, total_pages))
+                       for i in range(1 + b_batch_page_offset,
+                                      min(pages_per_batch * num_batches + b_batch_page_offset,
+                                          total_pages + 1),
+                                      pages_per_batch)]
+        except:
+            tb = traceback.format_exc()
+            print(f'!!!!!!!! Exception Thrown !!!!!!!!!')
+            print(tb)
+            print(f'!!!!!!!! Retrying !!!!!!!!!')
+            continue
+        return results
+
+
 def run_weekwise_all_bids_search():
     pages_per_batch = 5
     num_batches = 7
@@ -280,27 +317,15 @@ def run_weekwise_all_bids_search():
 
     print(f'Total pages: {total_pages}')
 
-    # all_bids = extract_upcoming_bids_data(url, 1, total_pages, 'TEST FILE ALL BIDS.csv')
     for b_batch_page_offset in range(0, total_pages, pages_per_batch * num_batches):
         b_batch_num = int(b_batch_page_offset / pages_per_batch / num_batches)
         print(
             f'-----------------------TIME STATS START BATCH NUM {b_batch_num} {datetime.now().strftime("%d.%b %Y %H:%M:%S")}')
-        results = []
-        while True:
-            try:
-                results = pool.starmap_async(extract_upcoming_bids_data,
-                                             [(url, i, min(i + pages_per_batch - 1, total_pages), 'random file name')
-                                              for i in range(1 + b_batch_page_offset,
-                                                             min(pages_per_batch * num_batches + b_batch_page_offset,
-                                                                 total_pages + 1),
-                                                             pages_per_batch)]).get()
-            except:
-                tb = traceback.format_exc()
-                print(f'!!!!!!!! Exception Thrown !!!!!!!!!')
-                print(tb)
-                print(f'!!!!!!!! Retrying !!!!!!!!!')
-                continue
-            break
+        if PARALLEL_MODE:
+            results = search_all_bids_parallel(pool, url, pages_per_batch, total_pages, b_batch_page_offset,
+                                               num_batches)
+        else:
+            results = search_all_bids_seq(url, pages_per_batch, total_pages, b_batch_page_offset, num_batches)
         print(
             f'-----------------------TIME STATS END BATCH NUM {b_batch_num} {datetime.now().strftime("%d.%b %Y %H:%M:%S")}')
         write_results_to_files(results)
@@ -316,8 +341,10 @@ if __name__ == "__main__":
                             'GARMENTS', 'TROUSER', 'GLOVES', 'BALACLAVA',
                             'UNIFORM'
                             ]
-    # run_boq_search()
+    PARALLEL_MODE = 1
     run_weekwise_all_bids_search()
+    run_boq_search()
+
 
 # TODO: add CPPP tenders parsing at https://gem.gov.in/cppp/1?
 # TODO: read the full item name, right now - its not reading the item names from the correct place!
