@@ -98,6 +98,16 @@ def extract_upcoming_bids_data(base_url, start_page, end_page):
     return all_bids
 
 
+def extract_boqs_data(base_url, start_idx, end_idx, boq_titles):
+    all_bids = {}
+    for boq_index in range(start_idx, end_idx + 1):
+        print(f'Processing BOQ index: {boq_index}; BOQ Info: {boq_titles[boq_index]}')
+        url = f"{base_url}&boqtitle={boq_titles[boq_index][1]}"
+        bids = get_all_bids_from_page(url)
+        all_bids.update(bids)
+    return all_bids
+
+
 def parse_formula(formula):
     negs = []
     splitted = formula.split('--')
@@ -196,18 +206,44 @@ def write_parsed_boqs(boqs):
     print(f'Saved BOQ titles to {filename}')
 
 
+def get_tenders_for_boqs(boq_titles):
+    boqs_per_batch = 5
+    num_batches = 7
+    pool = mp.Pool(num_batches + 1)
+
+    start, end = get_offset_dates(0, 100)
+    url = f'https://bidplus.gem.gov.in/advance-search?from_date={start}&to_date={end}&searchboq=Search'
+
+    total_pages = len(boq_titles)
+
+    for b_batch_page_offset in range(0, total_pages, boqs_per_batch * num_batches):
+        b_batch_num = int(b_batch_page_offset / boqs_per_batch / num_batches)
+        print(
+            f'-----------------------TIME STATS START BATCH NUM {b_batch_num} {datetime.now().strftime("%d.%b %Y %H:%M:%S")}')
+        if PARALLEL_MODE:
+            results = search_all_boqs_parallel(pool, url, boqs_per_batch, total_pages, b_batch_page_offset,
+                                               num_batches, boq_titles)
+        else:
+            results = search_all_boqs_seq(url, boqs_per_batch, total_pages, b_batch_page_offset, num_batches,
+                                          boq_titles)
+        print(
+            f'-----------------------TIME STATS END BATCH NUM {b_batch_num} {datetime.now().strftime("%d.%b %Y %H:%M:%S")}')
+        write_results_to_files(results)
+        print(f'Results len {len(results)} ---- {",".join(str(len(ra)) for ra in results)}')
+
+
 def run_boq_search():
     all_boq_titles = get_boq_titles()
     print(f'{len(all_boq_titles)} BOQ Titles found.')
     boq_titles, boq_buckets = parse_boq_titles(all_boq_titles, ALL_KEYWORD_FORMULAS)
-    # get_tenders_for_boqs(boq_titles)
-    write_parsed_boqs(boq_titles)
+    print(f'BOQ Titles filtered: {len(boq_titles)}')
+    get_tenders_for_boqs(boq_titles)
 
 
-def get_next_week_dates():
+def get_offset_dates(s_offset, e_offset):
     today = date.today()
-    start = (today + timedelta(days=4)).strftime("%d-%m-%Y")
-    end = (today + timedelta(days=11)).strftime("%d-%m-%Y")
+    start = (today + timedelta(days=s_offset)).strftime("%d-%m-%Y")
+    end = (today + timedelta(days=e_offset)).strftime("%d-%m-%Y")
     return start, end
 
 
@@ -288,6 +324,24 @@ def search_all_bids_parallel(pool, url, pages_per_batch, total_pages, b_batch_pa
         return results
 
 
+def search_all_boqs_parallel(pool, url, pages_per_batch, total_pages, b_batch_page_offset, num_batches, boq_titles):
+    while True:
+        try:
+            results = pool.starmap_async(extract_boqs_data,
+                                         [(url, i, min(i + pages_per_batch - 1, total_pages - 1), boq_titles)
+                                          for i in range(b_batch_page_offset,
+                                                         min(pages_per_batch * num_batches + b_batch_page_offset - 1,
+                                                             total_pages),
+                                                         pages_per_batch)]).get()
+        except:
+            tb = traceback.format_exc()
+            print(f'!!!!!!!! Exception Thrown !!!!!!!!!')
+            print(tb)
+            print(f'!!!!!!!! Retrying !!!!!!!!!')
+            continue
+        return results
+
+
 def search_all_bids_seq(url, pages_per_batch, total_pages, b_batch_page_offset, num_batches):
     while True:
         try:
@@ -305,12 +359,29 @@ def search_all_bids_seq(url, pages_per_batch, total_pages, b_batch_page_offset, 
         return results
 
 
+def search_all_boqs_seq(url, pages_per_batch, total_pages, b_batch_page_offset, num_batches, boq_titles):
+    while True:
+        try:
+            results = [extract_boqs_data(url, i, min(i + pages_per_batch - 1, total_pages - 1), boq_titles)
+                       for i in range(b_batch_page_offset,
+                                      min(pages_per_batch * num_batches + b_batch_page_offset - 1,
+                                          total_pages),
+                                      pages_per_batch)]
+        except:
+            tb = traceback.format_exc()
+            print(f'!!!!!!!! Exception Thrown !!!!!!!!!')
+            print(tb)
+            print(f'!!!!!!!! Retrying !!!!!!!!!')
+            continue
+        return results
+
+
 def run_weekwise_all_bids_search():
     pages_per_batch = 5
     num_batches = 7
     pool = mp.Pool(num_batches + 1)
 
-    start, end = get_next_week_dates()
+    start, end = get_offset_dates(4, 11)
     url = f'https://bidplus.gem.gov.in/advance-search?from_date={start}&to_date={end}&searchbid=Search'
 
     total_pages = get_total_pages(url)
@@ -342,9 +413,9 @@ if __name__ == "__main__":
                             'UNIFORM'
                             ]
     PARALLEL_MODE = 1
+
     run_weekwise_all_bids_search()
     run_boq_search()
-
 
 # TODO: add CPPP tenders parsing at https://gem.gov.in/cppp/1?
 # TODO: read the full item name, right now - its not reading the item names from the correct place!
