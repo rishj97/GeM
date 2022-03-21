@@ -381,8 +381,9 @@ def run_weekwise_all_bids_search():
     num_batches = 7
     pool = mp.Pool(num_batches + 1)
 
-    start, end = get_offset_dates(4, 11)
+    start, end = get_offset_dates(7, 14)
     url = f'https://bidplus.gem.gov.in/advance-search?from_date={start}&to_date={end}&searchbid=Search'
+    print(url)
 
     total_pages = get_total_pages(url)
 
